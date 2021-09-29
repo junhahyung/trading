@@ -1,0 +1,8 @@
+root: './data/Semicap_DailyData'
+tables:
+    table1: 
+        dir: 'Currencies_DAILY-Table 1.csv'
+        drop_sym: ['PX_VOLUME']  # Column symbols to remove
+        header: 5  # row number for header
+        index_col: 0  # column number for index
+
