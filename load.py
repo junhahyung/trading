@@ -4,19 +4,25 @@ import pandas as pd
 from torch.utils.data import Dataset
 
 
-data_dir = './data/Semicap_DailyData/Currencies_DAILY-Table 1.csv'
-cur = pd.read_csv(data_dir, header=5, index_col=0)
+'''
+data_dir = './data/Semicap_DailyData/Daily_share_px-Table 1.csv'
+cur = pd.read_csv(data_dir, header=5, index_col=0, na_values=0).fillna(0)
 
-DROP_SYM = ['PX_VOLUME']
 
-drop_cols = []
-keys = cur.keys()
-for SYM in DROP_SYM:
-    for key in keys:
-        if SYM in key:
-            drop_cols.append(key)
+headings = pd.read_csv(data_dir, skiprows=3, nrows=1)
+headings = [head for head in headings.columns if 'Unnamed' not in head]
+print(len(headings))
 
-tb = cur.drop(drop_cols, axis=1)
+eph = 7
+
+new_header_map = {}
+for idx, n in enumerate(cur.columns):
+    new_header_map[n] = headings[idx%eph] + '_' +n.split('.')[0]
+    
+cur.rename(columns=new_header_map, inplace=True)
+'''
+
+
 
 
 
@@ -27,6 +33,8 @@ class TradingDataset(Dataset):
 
         self.load_pd()
         print(self.tbs)
+        print(self.tbs[0].columns)
+        print(self.tbs[1].columns)
 
     def load_pd(self):
         self.tbs = []
@@ -34,16 +42,29 @@ class TradingDataset(Dataset):
             table_conf = AttrDict(self.tables[table_key])
             
             csv_dir = os.path.join(self.root, table_conf.dir) 
-            tb = pd.read_csv(csv_dir, header=table_conf.header, index_col=table_conf.index_col)
+            tb = pd.read_csv(csv_dir, header=table_conf.subheader, index_col=table_conf.index_col)
 
-            drop_cols = []
-            keys = tb.keys()
-            for SYM in table_conf.drop_sym:
-                for key in keys:
-                    if SYM in key:
-                        drop_cols.append(key)
 
-            tb = cur.drop(drop_cols, axis=1)
+            headings = pd.read_csv(csv_dir, skiprows=3, nrows=1)
+            headings = [head for head in headings.columns if 'Unnamed' not in head]
+            print(len(headings))
+
+            new_header_map = {}
+            for idx, n in enumerate(tb.columns):
+                new_header_map[n] = headings[idx//table_conf.eph] + '_' +n.split('.')[0]
+
+            tb.rename(columns=new_header_map, inplace=True)
+
+            if 'drop_sym' in table_conf.keys():
+                drop_cols = []
+                keys = tb.keys()
+                for SYM in table_conf.drop_sym:
+                    for key in keys:
+                        if SYM in key:
+                            drop_cols.append(key)
+
+                tb = tb.drop(drop_cols, axis=1)
+
             self.tbs.append(tb)
 
     def __len__(self):

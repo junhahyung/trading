@@ -3,6 +3,15 @@ tables:
     table1: 
         dir: 'Currencies_DAILY-Table 1.csv'
         drop_sym: ['PX_VOLUME']  # Column symbols to remove
-        header: 5  # row number for header
+        header: 3  # row number for header
+        subheader: 5 # row number for subheader
         index_col: 0  # column number for index
+        eph: 6  # # of column entries per header 
+
+    table2:
+        dir: 'Daily_share_px-Table 1.csv'
+        header: 3  # row number for header
+        subheader: 5 # row number for subheader
+        index_col: 0  # column number for index
+        eph: 7  # # of column entries per header 
 
