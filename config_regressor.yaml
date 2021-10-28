@@ -1,0 +1,42 @@
+model_name: BertRegressor
+training:
+    n_epochs: 10000
+    save_freq: 1000 # in steps
+    val_freq: 100 # in steps
+    lr: 0.0001
+    dropout: 0.5
+    attention_dropout: 0.5
+    num_attention_heads: 6
+    hidden_size: 192
+    intermediate_size: 768
+    bert_layers: 2
+    batch_size: 256
+    output_dir: '/home/nas1_temp/junhahyung/trading/output'
+    
+
+root: './data/Semicap_DailyData'
+tables:
+    table1: 
+        dir: 'Currencies_DAILY-Table 1.csv'
+        drop_sym: ['PX_VOLUME']  # Column symbols to remove
+        header: 3  # row number for header
+        subheader: 5 # row number for subheader
+        index_col: 0  # column number for index
+        eph: 6  # # of column entries per header 
+
+    table2:
+        dir: 'Daily_share_px-Table 1.csv'
+        header: 3  # row number for header
+        subheader: 5 # row number for subheader
+        index_col: 0  # column number for index
+        eph: 7  # # of column entries per header 
+
+test_split: [5300]
+target_equity: ['LRCX US', 'AMAT US', 'TER US', '8035 JT', '6920 JT', '6146 JT', '7735 JT', '6857 JT', 'ASML NA', '240810 KS', '084370 KS', '688012 CH']
+input_dim: 314 # number of features
+target_subheader: 'Equity_EQY_WEIGHTED_AVG_PX'
+nhist: 10
+ntarget: [1,2] # target date to predict. ex) [1,3] => t+1, t+3
+
+
+
