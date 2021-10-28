@@ -34,6 +34,7 @@ class TradingDataset(Dataset):
         self.mode = mode
         self.target_dim = len(data_config.target_equity)
         self.aug_lambda = data_config.training.aug_lambda
+        self.nway = data_config.training.nway
 
         self.load_pd()
         self.clean_data()
@@ -183,13 +184,19 @@ class TradingDataset(Dataset):
                         denom = prev_origin[tdim] if prev_origin[tdim] != 0 else 1.
                         earnings[tdim] = (target_origin[tdim] - prev_origin[tdim]) / denom
 
-                    # 0: neutral / 1: pos / 2: neg 
+                    # 3way 0: neutral / 1: pos / 2: neg 
+                    # 2way 0: neg / 1: pos 
                     label = np.zeros(self.target_dim)
-                    pos = np.ones(self.target_dim)
-                    neg = pos + pos
-                    label = np.where(earnings >= 0.01, pos, label)
-                    label = np.where(earnings <= -0.01, neg, label)
-                    _y_class.append(label)
+                    if self.nway == 3:
+                        pos = np.ones(self.target_dim)
+                        neg = pos + pos
+                        label = np.where(earnings >= 0.01, pos, label)
+                        label = np.where(earnings <= -0.01, neg, label)
+                        _y_class.append(label)
+                    elif self.nway == 2:
+                        pos = np.ones(self.target_dim)
+                        label = np.where(earnings > 0, pos, label)
+                        _y_class.append(label)
 
                 _y = np.array(_y)
                 _y_class = np.array(_y_class)

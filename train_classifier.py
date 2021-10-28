@@ -31,6 +31,9 @@ def main():
                     device)
 
     trainer.train()
+
+    print(f'best acc: {trainer.best_acc}')
+    print(f'best confusion: {trainer.best_confusion}')
     
 
 main()

@@ -52,7 +52,7 @@ class BertClassifier(nn.Module):
        classes = len(args.target_equity) * len(args.ntarget)
        self.input_dim = args.input_dim + 1 # num features + dates
        self.in_conv = nn.Conv1d(self.input_dim, bert_config.hidden_size, kernel_size=1)
-       self.out_linear = nn.Linear(self.bert.config.hidden_size, classes*3)
+       self.out_linear = nn.Linear(self.bert.config.hidden_size, classes*args.training.nway)
        #self.final_act = nn.Tanh()
 
 
