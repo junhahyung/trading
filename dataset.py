@@ -150,6 +150,9 @@ class TradingDataset(Dataset):
         for data_split in data_splits:
             data_splits_y.append(data_split[self.target_equity])
 
+        #print(data_splits_y[0].iloc[10:12].index.values)
+        #print(self.kanji_date_to_num(data_splits_y[0].iloc[10:12].index.values))
+
         interval, minval = [], []
         for _t in self.target_equity:
             interval.append(self.scale_dict[_t][0])
@@ -162,22 +165,31 @@ class TradingDataset(Dataset):
         nhist = self.data_config.nhist
 
         self.x = []
+        self.x_date = []
         self.y = []
+        self.y_date = []
+        self.y_origin = []
         self.y_class = []
         self.anchor = []
 
         for idx, data_split in enumerate(data_splits):
             for i in range(len(data_split)-nhist-max_ntarget+1):
-                self.x.append(data_split.iloc[i:i+nhist].to_numpy())
+                _x_row = data_split.iloc[i:i+nhist]
+                self.x.append(_x_row.to_numpy())
+                self.x_date.append(self.kanji_date_to_num(_x_row.index.values))
+
                 _y = []
+                _y_date = []
+                _y_origin = []
                 _y_class = []
                 _prev = data_splits_y[idx].iloc[i+nhist-1].to_numpy()
 
                 for t in self.data_config.ntarget:
-                    target = data_splits_y[idx].iloc[i+nhist+t-1].to_numpy()
-                    _y.append(target)
+                    target = data_splits_y[idx].iloc[i+nhist+t-1]
+                    _y.append(target.to_numpy())
+                    _y_date.append(self.kanji_date_to_num([target.name])[0])
 
-                    target_origin = self.recover_price(target, interval, minval)
+                    target_origin = self.recover_price(target.to_numpy(), interval, minval)
                     prev_origin = self.recover_price(_prev, interval, minval)
                     earnings = np.zeros(self.target_dim)
                     for tdim in range(len(earnings)):
@@ -198,10 +210,15 @@ class TradingDataset(Dataset):
                         label = np.where(earnings > 0, pos, label)
                         _y_class.append(label)
 
+                    _y_origin.append(target_origin)
+
                 _y = np.array(_y)
                 _y_class = np.array(_y_class)
+                _y_origin = np.array(_y_origin)
                 self.y.append(_y)
+                self.y_date.append(_y_date)
                 self.y_class.append(_y_class)
+                self.y_origin.append(_y_origin)
 
                 # add anchor
                 _anchor = []
@@ -214,6 +231,7 @@ class TradingDataset(Dataset):
         self.x = np.array(self.x)
         self.y = np.array(self.y)
         self.y_class = np.array(self.y_class)
+        self.y_origin = np.array(self.y_origin)
         self.anchor = np.array(self.anchor)
 
 
@@ -221,11 +239,16 @@ class TradingDataset(Dataset):
         return len(self.x)
 
     def __getitem__(self, idx):
+        ret_dict = {}
+        ret_dict['x_date'] = self.x_date[idx]
+        ret_dict['y_date'] = self.y_date[idx]
+        ret_dict['y_origin'] = self.y_origin[idx]
+
         if self.aug_lambda != 0 and self.mode=='train':
             x = torch.FloatTensor(self.x[idx])
-            return self.aug_lambda*torch.randn(x.shape) + x, torch.FloatTensor(self.y[idx]), torch.LongTensor(self.y_class[idx]), torch.FloatTensor(self.anchor[idx])
+            return self.aug_lambda*torch.randn(x.shape) + x, torch.FloatTensor(self.y[idx]), torch.LongTensor(self.y_class[idx]), torch.FloatTensor(self.anchor[idx]), ret_dict
         else:
-            return torch.FloatTensor(self.x[idx]), torch.FloatTensor(self.y[idx]), torch.LongTensor(self.y_class[idx]), torch.FloatTensor(self.anchor[idx])
+            return torch.FloatTensor(self.x[idx]), torch.FloatTensor(self.y[idx]), torch.LongTensor(self.y_class[idx]), torch.FloatTensor(self.anchor[idx]), ret_dict
 
 #--- testing! ----
 
@@ -235,6 +258,12 @@ with open('./config_classifier.yaml', 'r') as fp:
     data_config = AttrDict(yaml.load(fp, Loader=yaml.FullLoader))
     
 tdset = TradingDataset(data_config, mode='train')
+di = tdset[0][-1]
+print(di['x_date'])
+print('----')
+print(di['y_date'])
+
+
 length=len(tdset)
 zero = 0
 one = 0

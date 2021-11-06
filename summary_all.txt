@@ -1,0 +1,160 @@
+4layer
+best val acc: 0.5622161626815796
+
+====
+4layer384,12
+best val acc: 0.5701634883880615
+
+====
+6layer
+best val acc: 0.5790190696716309
+
+====
+6layer384
+best val acc: 0.5615350008010864
+
+====
+default
+best val acc: 0.5794731974601746
+
+====
+nhist5-ntarget1
+best val acc: 0.5735694766044617
+
+====
+nhist10-ntarget1
+best val acc: 0.5686003565788269
+
+====
+nhist15-ntarget1
+best val acc: 0.5613912343978882
+
+====
+nhist20-ntarget1
+best val acc: 0.5163352489471436
+
+====
+nhist25-ntarget1
+best val acc: 0.5432276725769043
+
+====
+nhist30-ntarget1
+best val acc: 0.5433723330497742
+
+====
+nhist5-ntarget2
+best val acc: 0.5523679256439209
+
+====
+nhist10-ntarget2
+best val acc: 0.5542474389076233
+
+====
+nhist15-ntarget2
+best val acc: 0.5540730357170105
+
+====
+nhist20-ntarget2
+best val acc: 0.5529439449310303
+
+====
+nhist25-ntarget2
+best val acc: 0.5344412326812744
+
+====
+nhist30-ntarget2
+best val acc: 0.5334799885749817
+
+====
+nhist35-ntarget2
+best val acc: 0.5391865372657776
+
+====
+nhist5-ntarget3
+best val acc: 0.5513699054718018
+
+====
+nhist15-ntarget3
+best val acc: 0.5661972165107727
+
+====
+nhist20-ntarget3
+best val acc: 0.5488095283508301
+
+====
+nhist25-ntarget3
+best val acc: 0.5640096664428711
+
+====
+nhist35-ntarget3
+best val acc: 0.5631840825080872
+
+====
+nhist5-ntarget5
+best val acc: 0.571395754814148
+
+====
+nhist10-ntarget5
+best val acc: 0.5619180798530579
+
+====
+nhist15-ntarget5
+best val acc: 0.5630311369895935
+
+====
+nhist20-ntarget5
+best val acc: 0.560584306716919
+
+====
+nhist25-ntarget5
+best val acc: 0.5653547048568726
+
+====
+nhist30-ntarget5
+best val acc: 0.5530079007148743
+
+====
+nhist35-ntarget5
+best val acc: 0.5630630254745483
+
+====
+target1
+best val acc: 0.5706722140312195
+
+====
+target3
+best val acc: 0.5611111521720886
+
+====
+target5
+best val acc: 0.566107988357544
+
+====
+target7
+best val acc: 0.579353928565979
+
+====
+target9
+best val acc: 0.5941619277000427
+
+====
+target11
+best val acc: 0.5899621248245239
+
+====
+target13
+best val acc: 0.5999999642372131
+
+====
+target15
+best val acc: 0.5984195470809937
+
+====
+target17
+best val acc: 0.5985066890716553
+
+====
+target19
+best val acc: 0.6170058250427246
+
+====

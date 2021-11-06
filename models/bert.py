@@ -15,8 +15,9 @@ class BertRegressor(nn.Module):
        bert_config.num_attention_heads = args.training.num_attention_heads
        bert_config.hidden_size = args.training.hidden_size
        bert_config.intermediate_size = args.training.intermediate_size
+       self.config = bert_config
 
-       print(bert_config)
+       #print(bert_config)
        self.bert = BertModel(bert_config)
        classes = len(args.target_equity) * len(args.ntarget)
        self.input_dim = args.input_dim + 1 # num features + dates
@@ -46,8 +47,9 @@ class BertClassifier(nn.Module):
        bert_config.num_attention_heads = args.training.num_attention_heads
        bert_config.hidden_size = args.training.hidden_size
        bert_config.intermediate_size = args.training.intermediate_size
+       self.config = bert_config
 
-       print(bert_config)
+       #print(bert_config)
        self.bert = BertModel(bert_config)
        classes = len(args.target_equity) * len(args.ntarget)
        self.input_dim = args.input_dim + 1 # num features + dates

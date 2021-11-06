@@ -13,4 +13,4 @@ def get_model(args):
         raise NotImplementedError()
 
     optimizer = optim.Adam(model.parameters(), lr=args.training.lr)
-    return model, optimizer
+    return model, optimizer, model.config

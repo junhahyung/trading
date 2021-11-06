@@ -1,7 +1,8 @@
 model_name: BertClassifier
 training:
+    n_ensemble: 5
     nway: 2 # 2 or 3
-    n_epochs: 50
+    n_epochs: 100 
     save_freq: 1000 # in steps
     val_freq: 50 # in steps
     lr: 0.0001
@@ -11,7 +12,7 @@ training:
     hidden_size: 192
     intermediate_size: 768
     bert_layers: 2
-    batch_size: 256
+    batch_size: 1024
     output_dir: '/home/nas1_temp/junhahyung/trading/output'
     aug_lambda: 0.005
     
