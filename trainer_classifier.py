@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
+# trainer class
 class Trainer():
     def __init__(self, args, models, optimizers, dataloader_train, dataloader_test, loss_fn, device):
         self.args = args
@@ -36,6 +37,7 @@ class Trainer():
         print(f"output dir: {self.output_dir}")
 
 
+    # training function
     def train(self):
         wandb.init(entity='junha', project="trading", name=self.args.name)
         global_step = 0
@@ -44,8 +46,10 @@ class Trainer():
             print(f'start epoch [{epoch}]')
             for step, batch in enumerate(tqdm.tqdm(self.dataloader_train)):
                 global_step += step
+                # train step
                 self.train_step(batch, global_step, epoch)
 
+        # write summary file
         fn = os.path.join(self.output_dir, 'summary.txt')
         with open(fn, 'w') as fp:
             fp.write(str(self.args))
@@ -54,6 +58,7 @@ class Trainer():
             fp.write(f'best confusion: {self.best_confusion}')
 
 
+    # save model checkpoint
     def save_model(self, name, epoch, step):
         save_dict = {}
         state_dicts = []
@@ -66,15 +71,17 @@ class Trainer():
         print(f"saved model {save_name}")
 
 
+    # train step function
     def train_step(self, batch, step, epoch):
         # x: (bs, seq_length, dim)
         # y: (bs, ntarget, target_dim)
 
+        # prepare data pair
         x, _, y, _, _ = batch
         x = x.to(self.device)
         y = y.to(self.device)
-        # set to the same dimension
 
+        # calculate and update each model
         preds = []
         for model, optimizer in zip(self.models, self.optimizers):
             model.train()
@@ -86,11 +93,13 @@ class Trainer():
             loss.backward()
             optimizer.step()
 
+        # calculate acc
         pred = torch.stack(preds).mean(0)
         _, max_ind = torch.max(pred, -1) # (-1)
         acc = self.calc_acc(max_ind, y.view(-1))
 
 
+        # validation step
         if step % self.args.training.val_freq == 0:
             print('[start validation]')
             val_loss_sum = 0

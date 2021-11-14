@@ -15,9 +15,11 @@ def run(opt):
     with open('./config_classifier.yaml', 'r') as fp:
         args = AttrDict(yaml.load(fp, Loader=yaml.FullLoader))
 
+    # prepare arguments
     args.name = opt.name
     args.nhist = opt.nhist
     args.ntarget = opt.ntarget
+    # arguments that we want to control during training
     args['training']['num_attention_heads'] = opt.num_attention_heads
     args['training']['hidden_size'] = opt.hidden_size
     args['training']['bert_layers'] = opt.bert_layers
@@ -33,13 +35,17 @@ def run(opt):
         optimizers.append(optimizer)
 
     print(bert_config)
+
+    # prepare dataset
     dataset_train = TradingDataset(args, mode='train')
     dataloader_train = DataLoader(dataset_train, batch_size=args.training.batch_size, shuffle=True, num_workers=16)
     dataset_test = TradingDataset(args, mode='test')
     dataloader_test = DataLoader(dataset_test, batch_size=args.training.batch_size, shuffle=False, num_workers=16)
 
+    # prepare loss function
     loss_fn = nn.CrossEntropyLoss()
 
+    # load trainer
     trainer = Trainer(args,
                     models,
                     optimizers,
@@ -48,6 +54,7 @@ def run(opt):
                     loss_fn,
                     device)
 
+    # start training
     trainer.train()
 
     print(f'best acc: {trainer.best_acc}')
@@ -55,6 +62,7 @@ def run(opt):
     
 
 
+# parse input arguments
 def parse():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default='default_run')
@@ -67,5 +75,6 @@ def parse():
 
     return opt
 
+# run training
 opt = parse()
 run(opt)
