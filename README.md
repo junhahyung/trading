@@ -16,9 +16,9 @@ transformers 4.11.3\
 wandb 0.12.4
 
 ## How to run
-- ex) python train_classifier.py --name target25 --ntarget 25
+- ex) `python train_classifier.py --name target25 --ntarget 25`
 
-- simple run: bash exp_script.sh
+- simple run: `bash exp_script.sh`
 
 - input arguments: `train_classifier.py` 의 parse function 참고
 
