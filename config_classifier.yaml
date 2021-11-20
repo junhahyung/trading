@@ -40,6 +40,9 @@ input_dim: 314 # number of features
 target_subheader: 'Equity_EQY_WEIGHTED_AVG_PX'
 nhist: 10
 ntarget: [1] # target date to predict. ex) [1,3] => t+1, t+3
+use_ampm: True
+AM: ['JT', 'KS', 'CH', 'TT', 'HK']
+PM: ['US', 'NA', 'FP', 'GY']
 
 
 

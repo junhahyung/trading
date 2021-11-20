@@ -20,7 +20,10 @@ class BertRegressor(nn.Module):
        #print(bert_config)
        self.bert = BertModel(bert_config)
        classes = len(args.target_equity) * len(args.ntarget)
-       self.input_dim = args.input_dim + 1 # num features + dates
+       if args.use_ampm:
+           self.input_dim = args.input_dim + 2 # num features + dates
+       else:
+           self.input_dim = args.input_dim + 1 # num features + dates
        self.in_conv = nn.Conv1d(self.input_dim, bert_config.hidden_size, kernel_size=1)
        self.out_linear = nn.Linear(self.bert.config.hidden_size, classes)
        self.final_act = nn.Tanh()
@@ -52,7 +55,10 @@ class BertClassifier(nn.Module):
        #print(bert_config)
        self.bert = BertModel(bert_config)
        classes = len(args.target_equity) * len(args.ntarget)
-       self.input_dim = args.input_dim + 1 # num features + dates
+       if args.use_ampm:
+           self.input_dim = args.input_dim + 2 # num features + dates
+       else:
+           self.input_dim = args.input_dim + 1 # num features + dates
        self.in_conv = nn.Conv1d(self.input_dim, bert_config.hidden_size, kernel_size=1)
        self.out_linear = nn.Linear(self.bert.config.hidden_size, classes*args.training.nway)
        #self.final_act = nn.Tanh()
