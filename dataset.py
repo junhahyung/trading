@@ -42,6 +42,8 @@ class TradingDatasetAP(Dataset):
 
         self.am = data_config.AM
         self.pm = data_config.PM
+        self.am_index = data_config.AM_Index
+        self.pm_index = data_config.PM_Index
 
         self.load_pd()
         self.clean_data()
@@ -166,6 +168,26 @@ class TradingDatasetAP(Dataset):
                 if c not in self.am_dict and c not in self.pm_dict:
                     print(c)
                     raise ValueError('wrong am pm - none')
+
+            elif 'Index' in c:
+                for amikey in self.am_index:
+                    if amikey + ' Index' in c:
+                        self.am_dict[c] = idx
+                        break
+                for pmikey in self.pm_index:
+                    if pmikey + ' Index' in c:
+                        self.pm_dict[c] = idx
+                        break
+
+                if c in self.am_dict and c in self.pm_dict:
+                    print(c)
+                    raise ValueError('wrong am pm - all')
+                if c not in self.am_dict and c not in self.pm_dict:
+                    print(c)
+                    raise ValueError('wrong am pm - none')
+            else:
+                pass
+
 
         # change AM PM values
         for c in self.tbs.columns:
@@ -560,8 +582,8 @@ class TradingDataset(Dataset):
             return torch.FloatTensor(self.x[idx]), torch.FloatTensor(self.y[idx]), torch.LongTensor(self.y_class[idx]), torch.FloatTensor(self.anchor[idx]), ret_dict
 
 #--- testing! ----
-'''
 
+'''
 import yaml
 from torch.utils.data import DataLoader
 
