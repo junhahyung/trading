@@ -30,6 +30,9 @@ class Trainer():
 
 
         self.best_acc = 0
+        self.best_thres_07_acc = 0
+        self.best_thres_08_acc = 0
+        self.best_thres_09_acc = 0
         self.softmax = nn.Softmax(dim=1)
 
         self.output_dir = os.path.join(args.training.output_dir, args.name)
@@ -60,6 +63,9 @@ class Trainer():
             fp.write(str(self.args))
             fp.write('\n==================\n')
             fp.write(f'best val acc: {self.best_acc}\n')
+            fp.write(f'best thres 0.7 val acc: {self.best_thres_07_acc}\n')
+            fp.write(f'best thres 0.8 val acc: {self.best_thres_08_acc}\n')
+            fp.write(f'best thres 0.9 val acc: {self.best_thres_09_acc}\n')
             fp.write(f'best confusion: {self.best_confusion}')
 
 
@@ -146,6 +152,9 @@ class Trainer():
                 print(f'current best acc: {self.best_acc}')
                 print(f'current best confusion: {self.best_confusion}')
                 self.save_model('best_model', epoch, step)
+            if self.best_thres_acc < val_thres_acc:
+                self.best_thres_acc = val_thres_acc
+                self.save_model('best_thres_model', epoch, step)
 
         else:
             wandb.log({"train_loss": loss, "train_acc": acc, "epoch": epoch}, step=step)
@@ -240,24 +249,32 @@ class Trainer():
             print('[start validation]')
             val_loss_sum = 0
             val_acc_sum = 0
-            val_thres_acc_sum = 0
+            val_thres_07_acc_sum = 0
+            val_thres_08_acc_sum = 0
+            val_thres_09_acc_sum = 0
             count = 0 # sum of batch sizes
-            t_count = 0 # number of datapoints above thres
+            t_07_count = 0 # number of datapoints above thres
+            t_08_count = 0 # number of datapoints above thres
+            t_09_count = 0 # number of datapoints above thres
             a_count = 0 # number of datapoints
             true_list = []
             pred_list = []
 
             for val_batch in tqdm.tqdm(self.dataloader_test):
                 _vl, bs, p, t = self.validate_step_ampm(val_batch)
-                bs, t_bs, a_bs = bs
+                bs, a_bs, t_07_bs, t_08_bs, t_09_bs = bs
                 # val loss
                 val_loss_sum += _vl[0]*a_bs
                 # val acc
                 val_acc_sum += _vl[1]*a_bs
                 # val thres acc
-                val_thres_acc_sum += _vl[2]*t_bs
+                val_thres_07_acc_sum += _vl[2]*t_07_bs
+                val_thres_08_acc_sum += _vl[3]*t_08_bs
+                val_thres_09_acc_sum += _vl[4]*t_09_bs
                 count += bs
-                t_count += t_bs
+                t_07_count += t_07_bs
+                t_08_count += t_08_bs
+                t_09_count += t_09_bs
                 a_count += a_bs
 
                 pred_list += p.cpu().tolist()
@@ -265,18 +282,44 @@ class Trainer():
 
             val_loss = val_loss_sum / a_count
             val_acc = val_acc_sum / a_count
-            if t_count == 0:
-                val_thres_acc = 0
+            if t_07_count == 0:
+                val_thres_07_acc = 0
             else:
-                val_thres_acc = val_thres_acc_sum / t_count
+                val_thres_07_acc = val_thres_07_acc_sum / t_07_count
+
+            if t_08_count == 0:
+                val_thres_08_acc = 0
+            else:
+                val_thres_08_acc = val_thres_08_acc_sum / t_08_count
+
+            if t_09_count == 0:
+                val_thres_09_acc = 0
+            else:
+                val_thres_09_acc = val_thres_09_acc_sum / t_09_count
+
+            above_thres_07_prob = t_07_count / float(a_count)
+            above_thres_08_prob = t_08_count / float(a_count)
+            above_thres_09_prob = t_09_count / float(a_count)
+
             confusion = self.get_confusion(pred_list, true_list)
-            wandb.log({"train_loss": loss, "train_acc": acc, "val_loss": val_loss, "val_acc": val_acc, "val_thres_acc": val_thres_acc, "above_thres_prob": t_count/float(a_count), "epoch": epoch, "conf_mat": wandb.plot.confusion_matrix(y_true=true_list, preds=pred_list, class_names=self.class_names)}, step=step)
+            wandb.log({"train_loss": loss, "train_acc": acc, "val_loss": val_loss, "val_acc": val_acc, "val_thres_07_acc": val_thres_07_acc, "val_thres_08_acc": val_thres_08_acc, "val_thres_09_acc": val_thres_09_acc, "above_thres_07_prob": above_thres_07_prob, "above_thres_08_prob": above_thres_08_prob, "above_thres_09_prob": above_thres_09_prob, "epoch": epoch, "conf_mat": wandb.plot.confusion_matrix(y_true=true_list, preds=pred_list, class_names=self.class_names)}, step=step)
             if self.best_acc < val_acc:
                 self.best_acc = val_acc
                 self.best_confusion = confusion
                 print(f'current best acc: {self.best_acc}')
                 print(f'current best confusion: {self.best_confusion}')
                 self.save_model('best_model', epoch, step)
+
+            # 0.002 is just heuristic number
+            if self.best_thres_07_acc < val_thres_07_acc and above_thres_07_prob > 0.002:
+                self.best_thres_07_acc = val_thres_07_acc
+                self.save_model(f'best_thres_07_model_{val_thres_07_acc}_{above_thres_07_prob}', epoch, step)
+            if self.best_thres_08_acc < val_thres_08_acc and above_thres_08_prob > 0.002:
+                self.best_thres_08_acc = val_thres_08_acc
+                self.save_model(f'best_thres_08_model_{val_thres_08_acc}_{above_thres_08_prob}', epoch, step)
+            if self.best_thres_09_acc < val_thres_09_acc and above_thres_09_prob > 0.002:
+                self.best_thres_09_acc = val_thres_09_acc
+                self.save_model(f'best_thres_09_model_{val_thres_09_acc}_{above_thres_09_prob}', epoch, step)
 
         else:
             wandb.log({"train_loss": loss, "train_acc": acc, "epoch": epoch}, step=step)
@@ -327,23 +370,29 @@ class Trainer():
             acc = self.calc_acc(max_ind, y.view(-1))
 
             pred = self.softmax(pred)
-            trunc_pred = torch.where(pred > 0.9, pred, torch.zeros_like(pred).to(self.device))
-            logit_sum = torch.sum(trunc_pred, -1)
-            nonzero_ind = torch.nonzero(logit_sum)
-            trunc_bs = len(nonzero_ind)
-            #print(nonzero_ind)
-            #print(trunc_bs)
-            trunc_max_ind  = max_ind[nonzero_ind]
-            trunc_y = y.view(-1)[nonzero_ind]
-            if trunc_bs != 0:
-                thres_acc = self.calc_acc(trunc_max_ind.view(-1), trunc_y.view(-1))
-            else:
-                thres_acc = 0
-            #np.where(pred > 0.8)
-            #np.where(pred > 0.9)
+            def get_thres_acc(pred, y, max_ind, thres):
+                trunc_pred = torch.where(pred > thres, pred, torch.zeros_like(pred).to(self.device))
+                logit_sum = torch.sum(trunc_pred, -1)
+                nonzero_ind = torch.nonzero(logit_sum)
+                trunc_bs = len(nonzero_ind)
+                #print(nonzero_ind)
+                #print(trunc_bs)
+                trunc_max_ind  = max_ind[nonzero_ind]
+                trunc_y = y.view(-1)[nonzero_ind]
+                if trunc_bs != 0:
+                    thres_acc = self.calc_acc(trunc_max_ind.view(-1), trunc_y.view(-1))
+                else:
+                    thres_acc = 0
+                #np.where(pred > 0.8)
+                #np.where(pred > 0.9)
+                return thres_acc, trunc_bs
 
-        val_loss = [val_loss, acc, thres_acc]
-        bs = [bs, trunc_bs, a_bs]
+            thres_07_acc, trunc_bs_07 = get_thres_acc(pred, y, max_ind, 0.7)
+            thres_08_acc, trunc_bs_08 = get_thres_acc(pred, y, max_ind, 0.8)
+            thres_09_acc, trunc_bs_09 = get_thres_acc(pred, y, max_ind, 0.9)
+
+        val_loss = [val_loss, acc, thres_07_acc, thres_08_acc, thres_09_acc]
+        bs = [bs, a_bs, trunc_bs_07, trunc_bs_08, trunc_bs_09]
 
         return val_loss, bs, max_ind, y.view(-1)
 

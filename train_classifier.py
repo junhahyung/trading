@@ -12,15 +12,19 @@ from models.get_model import get_model
 
 # main loop
 def run(opt):
-    with open('./config_classifier.yaml', 'r') as fp:
+    with open('./config_classifier_ampm.yaml', 'r') as fp:
         args = AttrDict(yaml.load(fp, Loader=yaml.FullLoader))
 
     # prepare arguments
     args.name = opt.name
     args.nhist = opt.nhist
     args.ntarget = list(opt.ntarget)
+    args.use_ampm = bool(args.use_ampm)
     for i in args.ntarget:
         assert isinstance(i, int)
+
+    print('==== N target====')
+    print(args.ntarget)
     # arguments that we want to control during training
     args['training']['num_attention_heads'] = opt.num_attention_heads
     args['training']['hidden_size'] = opt.hidden_size
@@ -40,6 +44,8 @@ def run(opt):
 
     # prepare dataset
     if args.use_ampm:
+        print(args.use_ampm)
+        print('~~~~')
         dataset_train = TradingDatasetAP(args, mode='train')
         dataset_test = TradingDatasetAP(args, mode='test')
     else:
