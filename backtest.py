@@ -157,6 +157,9 @@ class Trader_AMPM:
         # exchange rate
         er = ret_dict['y_curncy_prev_origin'][0].tolist()
 
+        # rsi
+        rsi = ret_dict['y_rsi_origin'][0][0].tolist()
+
         # how many equities to trade
         equity_num = 0
         # bootstap run to decide trade amount
@@ -167,8 +170,9 @@ class Trader_AMPM:
                 _max_ind = max_ind[idx]
                 _vwap = vwap[idx]
                 _closing_price = closing_price[idx]
+                _rsi = rsi[idx]
 
-                _long, _short = self.decision_algo(equity_name, _max_ind, _confidence, _vwap, _closing_price)
+                _long, _short = self.decision_algo(equity_name, _max_ind, _confidence, _vwap, _closing_price, _rsi)
                 if _long or _short:
                     self.trade_cnt += 1
                     equity_num += 1
@@ -186,8 +190,9 @@ class Trader_AMPM:
                 _max_ind = max_ind[idx]
                 _vwap = vwap[idx]
                 _closing_price = closing_price[idx]
+                _rsi = rsi[idx]
 
-                _long, _short = self.decision_algo(equity_name, _max_ind, _confidence, _vwap, _closing_price)
+                _long, _short = self.decision_algo(equity_name, _max_ind, _confidence, _vwap, _closing_price, _rsi)
                 _closing_price_usd = self.to_usd(equity_name, _closing_price, er)
 
 
@@ -258,16 +263,18 @@ class Trader_AMPM:
         '''
 
 
-    def decision_algo(self, equity_name, up, confidence, vwap, closing_price):
+    def decision_algo(self, equity_name, up, confidence, vwap, closing_price, rsi):
         _long = False
         _short = False
         confidence_thres = {'8035 JT':0.62, '6920 JT':0.67, '6146 JT':0.64, '7735 JT':0.63, '6857 JT':0.59, '240810 KS':0.8, '084370 KS':0.65, '688012 CH':0.81, 'LRCX US':0.56, 'AMAT US': 0.59, 'TER US':0.58, 'ASML NA':0.55}
-        if confidence > confidence_thres[equity_name]:
-        #if confidence > 0.5:
+        #if confidence > confidence_thres[equity_name]:
+        if confidence >= 0.5:
             # long
-            if closing_price < vwap and up:
+            if closing_price < vwap and up and rsi > 60:
+            #if closing_price < vwap and up:
                 _long = True
-            elif closing_price > vwap and not up:
+            elif closing_price > vwap and not up and rsi < 40:
+            #elif closing_price > vwap and not up:
                 _short = True
             else:
                 pass
