@@ -19,7 +19,8 @@ class BackTester:
         self.trader = Trader_AMPM(self.predictor, aum, self.target_equity, tax_rate)
 
     def run(self):
-        for data in tqdm(self.dataloader):
+        total_length = len(self.dataloader)
+        for idx, data in enumerate(tqdm(self.dataloader)):
             x, _, y, _, ret_dict = data
 
             date = ret_dict['x_date'].tolist()[0][-1]
@@ -38,20 +39,30 @@ class BackTester:
                           'closing_price': closing_price,
                           'ret_dict': ret_dict}
 
-            self.trader.cleanup_trade(**input_dict)
-            self.trader.trade(**input_dict)
+            # the last day
+            if idx >= total_length - max(args.ntarget):
+                self.trader.cleanup_trade(**input_dict)
+            else:
+                self.trader.cleanup_trade(**input_dict)
+                self.trader.trade(**input_dict)
 
-            aum_plot = self.trader.aum_plot
-            
-            xs = list(aum_plot.keys())
-            plt.plot(xs, list(aum_plot.values()))
-            plt.xticks(xs[::100], [x[2:-1] for x in xs[::100]], rotation=45)
-            plt.savefig('aumplot.jpg')
+        aum_plot = self.trader.aum_plot
+        
+        xs = list(aum_plot.keys())
+        plt.plot(xs, list(aum_plot.values()))
+        plt.xticks(xs[::100], [x[2:-1] for x in xs[::100]], rotation=45)
+        plt.savefig('aumplot.jpg')
 
 
         print(self.trader.aum)
         print(self.trader.trade_cnt)
         print(self.trader.initiate)
+        print(f'long count: {self.trader.long_cnt}')
+        print(f'long earnings: {self.trader.long_earnings}')
+        print(self.trader.account_long)
+        print(f'short count: {self.trader.short_cnt}')
+        print(f'short earnings: {self.trader.short_earnings}')
+        print(self.trader.account_short)
 
 
 class Trader_AMPM:
@@ -63,6 +74,10 @@ class Trader_AMPM:
         self.target_equity = target_equity
         self.trade_cnt = 0
         self.initiate = 0
+        self.long_cnt = 0
+        self.short_cnt = 0
+        self.long_earnings = 0
+        self.short_earnings = 0
         self.account_long = {}
         self.account_short = {}
         self.schedule = {}
@@ -76,6 +91,7 @@ class Trader_AMPM:
     def log(self,date, account_long, account_short, cash, aum):
         print('==========')
         print(f'[{date}] Cash: {cash}  AUM: {aum}')
+        '''
         print('--account_long--')
         for t in account_long.keys():
             for p in account_long[t].keys():
@@ -84,6 +100,7 @@ class Trader_AMPM:
         for t in account_short.keys():
             for p in account_short[t].keys():
                 print(f'{t} : {account_short[t][p]}')
+        '''
         print('==========')
 
 
@@ -107,6 +124,7 @@ class Trader_AMPM:
                     if amount < 0:
                         sell = -1*amount
                         self.cash += _vwap_usd*sell 
+                        self.long_earnings += _vwap_usd*sell
                         ps = list(self.account_long[equity_name].items())
                         for p, _amount in ps:
                             _left = max(0, _amount - sell)
@@ -132,6 +150,7 @@ class Trader_AMPM:
                                 self.account_short[equity_name][p] = _left
                                 cover = 0
                             self.cash += (2*p - _vwap_usd)*(_amount - _left) 
+                            self.short_earnings += (2*p - _vwap_usd)*(_amount - _left) 
                             if cover == 0:
                                 break
                     else:
@@ -176,6 +195,10 @@ class Trader_AMPM:
                 if _long or _short:
                     self.trade_cnt += 1
                     equity_num += 1
+                if _long:
+                    self.long_cnt += 1
+                elif _short:
+                    self.short_cnt += 1
 
         if equity_num == 0:
             self.aum_plot[str(date)] = self.aum
@@ -218,6 +241,8 @@ class Trader_AMPM:
                     _tax = _total*self.tax_rate
                     self.cash -= (_total + _tax)
 
+                    self.long_earnings -= (_total + _tax)
+
                     if next_date not in self.schedule[equity_name]:
                         self.schedule[equity_name][next_date] = -1*amount
                     else:
@@ -232,6 +257,9 @@ class Trader_AMPM:
                     _total = _closing_price_usd*amount
                     _tax = _total*self.tax_rate
                     self.cash -= (_total + _tax)
+
+                    self.short_earnings -= (_total + _tax)
+
                     if next_date not in self.schedule[equity_name]:
                         self.schedule[equity_name][next_date] = amount
                     else:
@@ -266,15 +294,17 @@ class Trader_AMPM:
     def decision_algo(self, equity_name, up, confidence, vwap, closing_price, rsi):
         _long = False
         _short = False
-        confidence_thres = {'8035 JT':0.62, '6920 JT':0.67, '6146 JT':0.64, '7735 JT':0.63, '6857 JT':0.59, '240810 KS':0.8, '084370 KS':0.65, '688012 CH':0.81, 'LRCX US':0.56, 'AMAT US': 0.59, 'TER US':0.58, 'ASML NA':0.55}
+        #confidence_thres = {'8035 JT':0.62, '6920 JT':0.67, '6146 JT':0.64, '7735 JT':0.63, '6857 JT':0.59, '240810 KS':0.8, '084370 KS':0.65, '688012 CH':0.81, 'LRCX US':0.56, 'AMAT US': 0.59, 'TER US':0.58, 'ASML NA':0.55}
         #if confidence > confidence_thres[equity_name]:
         if confidence >= 0.5:
             # long
             if closing_price < vwap and up and rsi > 60:
             #if closing_price < vwap and up:
+            #if rsi > 60:
                 _long = True
             elif closing_price > vwap and not up and rsi < 40:
             #elif closing_price > vwap and not up:
+            #elif rsi < 40:
                 _short = True
             else:
                 pass
@@ -338,8 +368,8 @@ if __name__=='__main__':
     with open(args_dir, 'r') as fp:
         args = AttrDict(yaml.load(fp, Loader=yaml.FullLoader))
 
-    args.ntarget = [2]
-    model_pth = './output/ampm_ntarget2/best_thres_08_model_0.6363636255264282_0.01014760147601476.pth'
+    args.ntarget = [4]
+    model_pth = './output/ampm_ntarget4_1year/best_model.pth'
     tester = BackTester(args, model_pth, 1000000, 0.0005)
     tester.run()
 
