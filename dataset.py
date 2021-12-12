@@ -662,6 +662,7 @@ class TradingDataset(Dataset):
         else:
             return torch.FloatTensor(self.x[idx]), torch.FloatTensor(self.y[idx]), torch.LongTensor(self.y_class[idx]), torch.FloatTensor(self.anchor[idx]), ret_dict
 
+'''
 #--- testing! ----
 import yaml
 from torch.utils.data import DataLoader
@@ -671,11 +672,17 @@ with open('./config_classifier_ampm.yaml', 'r') as fp:
     
 tdset = TradingDatasetAP(data_config, mode='train')
 dl = DataLoader(tdset, batch_size=1, shuffle=False)
+check = torch.zeros(11, dtype=torch.int8)
 for idx, b in enumerate(dl):
-    if idx == len(dl)-1:
-        x, _, y, _, etc = b
+    x, y_r, y, _, etc = b
+    
+    no = y_r.squeeze() != -0.5
+    _check = torch.bitwise_or(check, no)
+    if torch.any(_check != check):
+        print(f'changed : {_check}')
         print(etc['y_date'])
-        print(idx)
+        check = _check
+data_config.test_split = [4875]
 tdset = TradingDatasetAP(data_config, mode='test')
 dl = DataLoader(tdset, batch_size=1, shuffle=False)
 for idx, b in enumerate(dl):
@@ -689,28 +696,4 @@ for idx, b in enumerate(dl):
         print(idx)
 
 
-
-'''
-length=len(tdset)
-zero = 0
-one = 0
-two = 0
-for i in range(length):
-    zero += torch.sum(tdset[i][2]==0)
-    one += torch.sum(tdset[i][2]==1)
-    two += torch.sum(tdset[i][2]==2)
-
-print(zero)
-print(one)
-print(two)
-print(len(tdset))
-print('y')
-print(tdset[0][1][0].shape)
-print(tdset[0][1][0])
-print('anchor')
-print(tdset[0][3].shape)
-print(tdset[0][3][1])
-print('y_class')
-print(tdset[0][2].shape)
-print(tdset[0][2])
 '''

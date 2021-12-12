@@ -7,6 +7,7 @@ from attrdict import AttrDict
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from metric import expectancy, expectunity
 
 
 class BackTester:
@@ -16,10 +17,13 @@ class BackTester:
         self.dataloader = DataLoader(self.dataset, batch_size=1, shuffle=False)
         self.predictor = Predictor(args, model_pth)
         self.target_equity = args.target_equity
-        self.trader = Trader_AMPM(self.predictor, aum, self.target_equity, tax_rate)
+        self.trader = Trader_AMPM(self.predictor, args, aum, self.target_equity, tax_rate)
 
-    def run(self):
-        total_length = len(self.dataloader)
+    def run(self, end_date=None, do_analysis=True):
+        self.total_length = len(self.dataloader)
+        self.strat_cal_days = 0
+        end_count = 0
+
         for idx, data in enumerate(tqdm(self.dataloader)):
             x, _, y, _, ret_dict = data
 
@@ -39,35 +43,208 @@ class BackTester:
                           'closing_price': closing_price,
                           'ret_dict': ret_dict}
 
+            if idx == 0:
+                self.start_date = date
+
             # the last day
-            if idx >= total_length - max(args.ntarget):
+            if (end_date is not None and date >= end_date) or (idx >= self.total_length - max(args.ntarget)):
+                end_count += 1
                 self.trader.cleanup_trade(**input_dict)
+                self.trader.update_aum(**input_dict)
+                self.end_date = date
+                self.strat_cal_days += 1
             else:
                 self.trader.cleanup_trade(**input_dict)
                 self.trader.trade(**input_dict)
+                self.strat_cal_days += 1
 
+            if end_count >= max(args.ntarget):
+                break
+
+
+        if do_analysis:
+            self.analysis()
+
+        return self.trader.aum
+
+
+    def analysis(self):
+        # plot aum graph
+        # ----------------------------------------------------#
         aum_plot = self.trader.aum_plot
         
         xs = list(aum_plot.keys())
         plt.plot(xs, list(aum_plot.values()))
         plt.xticks(xs[::100], [x[2:-1] for x in xs[::100]], rotation=45)
         plt.savefig('aumplot.jpg')
+        # ----------------------------------------------------#
+
+        # account should be empty
+        for t in self.target_equity:
+            assert self.trader.account_long[t] == {}
+            assert self.trader.account_short[t] == {}
+        print('[SUCCESS] - account empty')
 
 
-        print(self.trader.aum)
-        print(self.trader.trade_cnt)
-        print(self.trader.initiate)
+        # equity-wise stats
+        # ----------------------------------------------------#
+        sr_long, strike_long, fail_long, wins_long, losses_long = self.strike_rate(self.trader.long_trade)
+        sr_short, strike_short, fail_short, wins_short, losses_short = self.strike_rate(self.trader.short_trade)
+
+        long_earnings = self.calc_earnings(self.trader.long_trade)
+        short_earnings = self.calc_earnings(self.trader.short_trade)
+        total_earnings = 0
+
+        expectancy_dict, expectunity_dict, total_dict = self.calc_expectunity(wins_long, losses_long, wins_short, losses_short, self.strat_cal_days)
+
+        for t in self.target_equity:
+            total_earnings += long_earnings[t]
+            total_earnings += short_earnings[t]
+            print('======')
+            print(t)
+            print(f'long strike rate: {sr_long[t]} ({strike_long[t]} / {strike_long[t]+fail_long[t]})')
+            print(f'long earnings: {long_earnings[t]}')
+            print(f'long expectancy: {expectancy_dict[t]["long"]}')
+            print(f'long expectunity: {expectunity_dict[t]["long"]}')
+            print(f'short strike rate: {sr_short[t]} ({strike_short[t]} / {strike_short[t]+fail_short[t]})')
+            print(f'short earnings: {short_earnings[t]}')
+            print(f'short expectancy: {expectancy_dict[t]["short"]}')
+            print(f'short expectunity: {expectunity_dict[t]["short"]}')
+
+            print('======')
+
+        # ----------------------------------------------------#
+
+        # overall stats
+        # ----------------------------------------------------#
+        print('===OVERALL STATS===')
+        print(f'start date: {self.start_date} - end date: {self.end_date}')
+        print(f'AUM: {self.trader.aum}')
+        print(f'total trade count: {self.trader.trade_cnt}')
+        print(f'total trade days(AMPM): {self.trader.initiate} / {self.strat_cal_days}')
         print(f'long count: {self.trader.long_cnt}')
-        print(f'long earnings: {self.trader.long_earnings}')
-        print(self.trader.account_long)
         print(f'short count: {self.trader.short_cnt}')
-        print(f'short earnings: {self.trader.short_earnings}')
-        print(self.trader.account_short)
+
+
+
+        print(f'total_earnings: {total_earnings}')
+        print(f'total long expectancy: {total_dict["total_long_expectancy"]}')
+        print(f'total long expectunity: {total_dict["total_long_expectunity"]}')
+        print(f'total short expectancy: {total_dict["total_short_expectancy"]}')
+        print(f'total short expectunity: {total_dict["total_short_expectunity"]}')
+        print(f'total expectancy: {total_dict["total_expectancy"]}')
+        print(f'total expectunity: {total_dict["total_expectunity"]}')
+
+        # ----------------------------------------------------#
+
+
+    def calc_expectunity(self, wins_long, losses_long, wins_short, losses_short, strat_cal_days):
+        expectancy_dict = {}
+        expectunity_dict = {}
+        total_wins = []
+        total_long_wins = []
+        total_short_wins = []
+        total_losses = []
+        total_long_losses = []
+        total_short_losses = []
+
+        for t in self.target_equity:
+            expectancy_dict[t] = {}
+            expectancy_dict[t]['total'] = expectancy(wins_long[t] + wins_short[t], losses_long[t] + losses_short[t])
+            expectancy_dict[t]['long'] = expectancy(wins_long[t], losses_long[t])
+            expectancy_dict[t]['short'] = expectancy(wins_short[t], losses_short[t])
+
+            expectunity_dict[t] = {}
+            expectunity_dict[t]['total'] = expectunity(wins_long[t] + wins_short[t], losses_long[t] + losses_short[t], strat_cal_days)
+            expectunity_dict[t]['long'] = expectunity(wins_long[t], losses_long[t], strat_cal_days)
+            expectunity_dict[t]['short'] = expectunity(wins_short[t], losses_short[t], strat_cal_days)
+
+            total_wins += wins_long[t] + wins_short[t]
+            total_long_wins += wins_long[t]
+            total_short_wins += wins_short[t]
+
+            total_losses += losses_long[t] + losses_short[t]
+            total_long_losses += losses_long[t]
+            total_short_losses += losses_short[t]
+
+        total_dict = {}
+        total_dict['total_expectancy'] = expectancy(total_wins, total_losses)
+        total_dict['total_long_expectancy'] = expectancy(total_long_wins, total_long_losses)
+        total_dict['total_short_expectancy'] = expectancy(total_short_wins, total_short_losses)
+
+        total_dict['total_expectunity'] = expectunity(total_wins, total_losses, strat_cal_days)
+        total_dict['total_long_expectunity'] = expectunity(total_long_wins, total_long_losses, strat_cal_days)
+        total_dict['total_short_expectunity'] = expectunity(total_short_wins, total_short_losses, strat_cal_days)
+
+        return expectancy_dict, expectunity_dict, total_dict
+
+
+    def calc_earnings(self, trade):
+        earnings = {}
+
+        for t in self.target_equity:
+            _earnings = 0
+            _trade = trade[t]
+            for date in _trade.keys():
+                for elem in _trade[date]:
+                    if isinstance(elem, float):
+                        assert elem > 0
+                        _earnings += elem
+                    elif isinstance(elem, list):
+                        assert elem[0] < 0
+                        _earnings += elem[0]
+                    else:
+                        raise ValueError
+            earnings[t] = _earnings
+        return earnings
+
+
+    def strike_rate(self, trade):
+        strike_rate = {}
+        strike = {}
+        fail = {}
+
+        wins = {}
+        losses = {}
+        for t in self.target_equity:
+            strike[t] = 0
+            fail[t] = 0
+            wins[t] = []
+            losses[t] = []
+            _trade = trade[t]
+            for date in _trade.keys():
+                for elem in _trade[date]:
+                    if isinstance(elem, list):
+                        p, ndate = elem
+                        assert p < 0
+                        for nelem in _trade[ndate]:
+                            if isinstance(nelem, float):
+                                assert nelem > 0
+                                if p+nelem > 0:
+                                    strike[t] += 1
+                                    wins[t].append(p+nelem)
+                                else:
+                                    fail[t] += 1
+                                    losses[t].append(p+nelem)
+                                break
+                    elif isinstance(elem, float):
+                        assert elem > 0
+
+        for t in self.target_equity:
+            _s = strike[t]
+            _f = fail[t]
+            if _s + _f > 0:
+                strike_rate[t] = _s / (_s+_f)
+            else:
+                strike_rate[t] = -1
+        return strike_rate, strike, fail, wins, losses
+            
 
 
 class Trader_AMPM:
-    def __init__(self, predictor, aum, target_equity, tax_rate):
+    def __init__(self, predictor, args, aum, target_equity, tax_rate):
         self.predictor = predictor
+        self.args = args
         self.aum = aum
         self.aum_plot = {}
         self.cash = aum
@@ -76,8 +253,10 @@ class Trader_AMPM:
         self.initiate = 0
         self.long_cnt = 0
         self.short_cnt = 0
-        self.long_earnings = 0
-        self.short_earnings = 0
+        #self.long_earnings = 0
+        #self.short_earnings = 0
+        self.long_trade = {}
+        self.short_trade = {}
         self.account_long = {}
         self.account_short = {}
         self.schedule = {}
@@ -86,6 +265,8 @@ class Trader_AMPM:
             self.account_long[t] = {}
             self.account_short[t] = {}
             self.schedule[t] = {}
+            self.long_trade[t] = {}
+            self.short_trade[t] = {} 
 
 
     def log(self,date, account_long, account_short, cash, aum):
@@ -123,8 +304,11 @@ class Trader_AMPM:
                     # sell
                     if amount < 0:
                         sell = -1*amount
-                        self.cash += _vwap_usd*sell 
-                        self.long_earnings += _vwap_usd*sell
+                        _total = _vwap_usd*sell
+                        _tax = _total*self.tax_rate
+                        #self.cash += _vwap_usd*sell 
+                        self.cash += (_total - _tax)
+                        self.long_trade[equity_name][date] = [_total - _tax]
                         ps = list(self.account_long[equity_name].items())
                         for p, _amount in ps:
                             _left = max(0, _amount - sell)
@@ -149,8 +333,11 @@ class Trader_AMPM:
                             else:
                                 self.account_short[equity_name][p] = _left
                                 cover = 0
-                            self.cash += (2*p - _vwap_usd)*(_amount - _left) 
-                            self.short_earnings += (2*p - _vwap_usd)*(_amount - _left) 
+                            _total = (2*p - _vwap_usd)*(_amount - _left)
+                            _tax = _total * self.tax_rate
+                            #self.cash += (2*p - _vwap_usd)*(_amount - _left) 
+                            self.cash += (_total - _tax)
+                            self.short_trade[equity_name][date] = [_total - _tax] 
                             if cover == 0:
                                 break
                     else:
@@ -241,7 +428,10 @@ class Trader_AMPM:
                     _tax = _total*self.tax_rate
                     self.cash -= (_total + _tax)
 
-                    self.long_earnings -= (_total + _tax)
+                    if date in self.long_trade[equity_name]:
+                        self.long_trade[equity_name][date].append([-1*(_total + _tax), next_date])
+                    else:
+                        self.long_trade[equity_name][date] = [[-1*(_total + _tax), next_date]]
 
                     if next_date not in self.schedule[equity_name]:
                         self.schedule[equity_name][next_date] = -1*amount
@@ -258,7 +448,10 @@ class Trader_AMPM:
                     _tax = _total*self.tax_rate
                     self.cash -= (_total + _tax)
 
-                    self.short_earnings -= (_total + _tax)
+                    if date in self.short_trade[equity_name]:
+                        self.short_trade[equity_name][date].append([-1*(_total + _tax), next_date])
+                    else:
+                        self.short_trade[equity_name][date] = [[-1*(_total + _tax), next_date]]
 
                     if next_date not in self.schedule[equity_name]:
                         self.schedule[equity_name][next_date] = amount
@@ -269,6 +462,34 @@ class Trader_AMPM:
                     pass
 
 
+        '''
+        # update aum
+        aum = 0
+        for idx, equity_name in enumerate(self.target_equity):
+            _closing_price = closing_price[idx]
+            _closing_price_usd = self.to_usd(equity_name, _closing_price, er)
+            for _, amount in self.account_long[equity_name].items():
+                aum += _closing_price_usd*amount
+
+            for p, amount in self.account_short[equity_name].items():
+                aum += (2*p-_closing_price_usd)*amount
+
+        aum += self.cash
+        self.aum = aum
+        self.aum_plot[str(date)] = self.aum
+        '''
+        self.update_aum(**input_dict)
+
+        '''
+        if log:
+            self.log(date, self.account_long, self.account_short, self.cash, self.aum)
+            #self.log(date, None, None, self.cash, self.aum)
+        '''
+
+    def update_aum(self, **input_dict):
+        closing_price = input_dict['closing_price']
+        er = input_dict['ret_dict']['y_curncy_prev_origin'][0].tolist()
+        date = input_dict['date']
         # update aum
         aum = 0
         for idx, equity_name in enumerate(self.target_equity):
@@ -284,12 +505,6 @@ class Trader_AMPM:
         self.aum = aum
         self.aum_plot[str(date)] = self.aum
 
-        '''
-        if log:
-            self.log(date, self.account_long, self.account_short, self.cash, self.aum)
-            #self.log(date, None, None, self.cash, self.aum)
-        '''
-
 
     def decision_algo(self, equity_name, up, confidence, vwap, closing_price, rsi):
         _long = False
@@ -298,13 +513,13 @@ class Trader_AMPM:
         #if confidence > confidence_thres[equity_name]:
         if confidence >= 0.5:
             # long
-            if closing_price < vwap and up and rsi > 60:
+            if closing_price < vwap and up and rsi > self.args.rsi_long_thres:
             #if closing_price < vwap and up:
-            #if rsi > 60:
+            #if rsi > self.args.rsi_long_thres:
                 _long = True
-            elif closing_price > vwap and not up and rsi < 40:
+            elif closing_price > vwap and not up and rsi < self.args.rsi_short_thres:
             #elif closing_price > vwap and not up:
-            #elif rsi < 40:
+            #elif rsi < self.args.rsi_short_thres:
                 _short = True
             else:
                 pass
@@ -327,9 +542,6 @@ class Trader_AMPM:
         else:
             raise NotImplementedError
         return price/er
-
-
-
 
 
 
@@ -369,9 +581,40 @@ if __name__=='__main__':
         args = AttrDict(yaml.load(fp, Loader=yaml.FullLoader))
 
     args.ntarget = [4]
+    if 'end_date' not in args:
+        args.end_date = None
     model_pth = './output/ampm_ntarget4_1year/best_model.pth'
+
+    #long_thres_list = [55, 60, 65, 70]
+    #short_thres_list = [40, 45, 50]
+    long_thres_list = [60]
+    short_thres_list = [40]
+
+    max_aum = 0
+    best_long_thres = 0
+    best_short_thres = 0
+
+    for long_thres in long_thres_list:
+        for short_thres in short_thres_list:
+            args.rsi_long_thres = long_thres
+            args.rsi_short_thres = short_thres
+
+            tester = BackTester(args, model_pth, 1000000, 0.0005)
+            aum = tester.run(end_date=args.end_date, do_analysis=False)
+            if max_aum < aum:
+                max_aum = aum
+                best_long_thres = long_thres
+                best_short_thres = short_thres
+
+
+    # best rsi threshold
+    args.rsi_long_thres = best_long_thres
+    args.rsi_short_thres = best_short_thres
     tester = BackTester(args, model_pth, 1000000, 0.0005)
-    tester.run()
+    aum = tester.run(end_date=args.end_date, do_analysis=True)
+    print(f'best rsi long thres: {best_long_thres}')
+    print(f'best rsi short thres: {best_short_thres}')
+
 
         
 

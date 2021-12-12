@@ -13,7 +13,7 @@ training:
     intermediate_size: 768
     bert_layers: 2
     batch_size: 1024
-    output_dir: '/home/nas1_temp/junhahyung/trading/output'
+    output_dir: '/home/nas2_userG/junhahyung/trading/output'
     aug_lambda: 0.005
     
 
@@ -34,12 +34,16 @@ tables:
         index_col: 0  # column number for index
         eph: 7  # # of column entries per header 
 
-test_split: [5300]
+test_split: [5400]
+#test_split: [5136]
+#test_split: [4875]
+#end_date: 202009240
 target_equity: ['LRCX US', 'AMAT US', 'TER US', '8035 JT', '6920 JT', '6146 JT', '7735 JT', '6857 JT', 'ASML NA', '240810 KS', '084370 KS', '688012 CH']
+#target_equity: ['LRCX US', 'AMAT US', 'TER US', '8035 JT', '6920 JT', '6146 JT', '7735 JT', '6857 JT', 'ASML NA', '240810 KS', '084370 KS']
 input_dim: 314 # number of features
 target_subheader: 'Equity_EQY_WEIGHTED_AVG_PX'
 nhist: 10
-ntarget: [2] # target date to predict. ex) [1,3] => t+1, t+3
+ntarget: [4] # target date to predict. ex) [1,3] => t+1, t+3
 use_ampm: True
 AM: ['JT', 'KS', 'CH', 'TT', 'HK']
 PM: ['US', 'NA', 'FP', 'GY']
