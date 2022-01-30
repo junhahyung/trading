@@ -30,9 +30,12 @@ class Trainer():
 
 
         self.best_acc = 0
+        self.best_thres_acc = 0
+        '''
         self.best_thres_07_acc = 0
         self.best_thres_08_acc = 0
         self.best_thres_09_acc = 0
+        '''
         self.softmax = nn.Softmax(dim=1)
 
         self.output_dir = os.path.join(args.training.output_dir, args.name)
@@ -183,7 +186,7 @@ class Trainer():
             acc = self.calc_acc(max_ind, y.view(-1))
 
             pred = self.softmax(pred)
-            trunc_pred = torch.where(pred > 0.9, pred, torch.zeros_like(pred).to(self.device))
+            trunc_pred = torch.where(pred > 0.7, pred, torch.zeros_like(pred).to(self.device))
             logit_sum = torch.sum(trunc_pred, -1)
             nonzero_ind = torch.nonzero(logit_sum)
             trunc_bs = len(nonzero_ind)

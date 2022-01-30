@@ -1,3 +1,6 @@
+import os
+import csv
+import argparse
 import torch
 import torch.nn as nn
 from dataset import TradingDatasetAP
@@ -12,6 +15,7 @@ from metric import expectancy, expectunity
 
 class BackTester:
     def __init__(self, args, model_pth, aum, tax_rate):
+        self.args = args
         self.dataset = TradingDatasetAP(args, mode='test')
         print(f'total length: {len(self.dataset)}')
         self.dataloader = DataLoader(self.dataset, batch_size=1, shuffle=False)
@@ -23,6 +27,9 @@ class BackTester:
         self.total_length = len(self.dataloader)
         self.strat_cal_days = 0
         end_count = 0
+        self.all_prices = {}
+        for t in self.target_equity:
+            self.all_prices[t] = {}
 
         for idx, data in enumerate(tqdm(self.dataloader)):
             x, _, y, _, ret_dict = data
@@ -43,6 +50,12 @@ class BackTester:
                           'closing_price': closing_price,
                           'ret_dict': ret_dict}
 
+
+            y_origin = ret_dict['y_origin'][0][0].tolist()
+            for j, t in enumerate(self.target_equity):
+                self.all_prices[t][date] = {}
+                self.all_prices[t][date] = y_origin[j]
+
             if idx == 0:
                 self.start_date = date
 
@@ -51,7 +64,7 @@ class BackTester:
                 end_count += 1
                 self.trader.cleanup_trade(**input_dict)
                 self.trader.update_aum(**input_dict)
-                self.end_date = date
+                #self.end_date = date
                 self.strat_cal_days += 1
             else:
                 self.trader.cleanup_trade(**input_dict)
@@ -59,6 +72,7 @@ class BackTester:
                 self.strat_cal_days += 1
 
             if end_count >= max(args.ntarget):
+                self.end_date = date
                 break
 
 
@@ -69,14 +83,16 @@ class BackTester:
 
 
     def analysis(self):
+        csv_out = {}
         # plot aum graph
         # ----------------------------------------------------#
         aum_plot = self.trader.aum_plot
         
         xs = list(aum_plot.keys())
-        plt.plot(xs, list(aum_plot.values()))
+        ys = list(aum_plot.values())
+        plt.plot(xs, ys)
         plt.xticks(xs[::100], [x[2:-1] for x in xs[::100]], rotation=45)
-        plt.savefig('aumplot.jpg')
+        plt.savefig(os.path.join(self.args.output_dir, 'aumplot.jpg'))
         # ----------------------------------------------------#
 
         # account should be empty
@@ -84,6 +100,8 @@ class BackTester:
             assert self.trader.account_long[t] == {}
             assert self.trader.account_short[t] == {}
         print('[SUCCESS] - account empty')
+
+        #print(self.trader.long_trade)
 
 
         # equity-wise stats
@@ -100,42 +118,50 @@ class BackTester:
         for t in self.target_equity:
             total_earnings += long_earnings[t]
             total_earnings += short_earnings[t]
-            print('======')
-            print(t)
-            print(f'long strike rate: {sr_long[t]} ({strike_long[t]} / {strike_long[t]+fail_long[t]})')
-            print(f'long earnings: {long_earnings[t]}')
-            print(f'long expectancy: {expectancy_dict[t]["long"]}')
-            print(f'long expectunity: {expectunity_dict[t]["long"]}')
-            print(f'short strike rate: {sr_short[t]} ({strike_short[t]} / {strike_short[t]+fail_short[t]})')
-            print(f'short earnings: {short_earnings[t]}')
-            print(f'short expectancy: {expectancy_dict[t]["short"]}')
-            print(f'short expectunity: {expectunity_dict[t]["short"]}')
-
-            print('======')
+            csv_out[t] = {}
+            csv_out[t]['long strike rate'] = f'{sr_long[t]} ({strike_long[t]} / {strike_long[t]+fail_long[t]})'
+            csv_out[t]['long earnings'] = f'{long_earnings[t]}'
+            csv_out[t]['long expectancy'] = f'{expectancy_dict[t]["long"]}'
+            csv_out[t]['long expectunity'] = f'{expectunity_dict[t]["long"]}'
+            csv_out[t]['short strike rate'] = f'{sr_short[t]} ({strike_short[t]} / {strike_short[t]+fail_short[t]})'
+            csv_out[t]['short earnings'] = f'{short_earnings[t]}'
+            csv_out[t]['short expectancy'] = f'{expectancy_dict[t]["short"]}'
+            csv_out[t]['short expectunity'] = f'{expectunity_dict[t]["short"]}'
 
         # ----------------------------------------------------#
 
         # overall stats
         # ----------------------------------------------------#
-        print('===OVERALL STATS===')
-        print(f'start date: {self.start_date} - end date: {self.end_date}')
-        print(f'AUM: {self.trader.aum}')
-        print(f'total trade count: {self.trader.trade_cnt}')
-        print(f'total trade days(AMPM): {self.trader.initiate} / {self.strat_cal_days}')
-        print(f'long count: {self.trader.long_cnt}')
-        print(f'short count: {self.trader.short_cnt}')
+        t = 'OVERALL STATS'
+        csv_out[t] = {}
+        csv_out[t]['date'] = f'start date: {self.start_date} - end date: {self.end_date}'
+        csv_out[t]['AUM'] = f'{self.trader.aum}'
+        csv_out[t]['total trade count'] = f'{self.trader.trade_cnt}'
+        csv_out[t]['total trade days(AMPM)'] = f'{self.trader.initiate} / {self.strat_cal_days}'
+        csv_out[t]['long count'] = f'{self.trader.long_cnt}'
+        csv_out[t]['short count'] = f'{self.trader.short_cnt}'
 
 
 
-        print(f'total_earnings: {total_earnings}')
-        print(f'total long expectancy: {total_dict["total_long_expectancy"]}')
-        print(f'total long expectunity: {total_dict["total_long_expectunity"]}')
-        print(f'total short expectancy: {total_dict["total_short_expectancy"]}')
-        print(f'total short expectunity: {total_dict["total_short_expectunity"]}')
-        print(f'total expectancy: {total_dict["total_expectancy"]}')
-        print(f'total expectunity: {total_dict["total_expectunity"]}')
+        csv_out[t]['total_earnings'] = f'{total_earnings}'
+        csv_out[t]['total long expectancy'] = f'{total_dict["total_long_expectancy"]}'
+        csv_out[t]['total long expectunity'] = f'{total_dict["total_long_expectunity"]}'
+        csv_out[t]['total short expectancy'] = f'{total_dict["total_short_expectancy"]}'
+        csv_out[t]['total short expectunity'] = f'{total_dict["total_short_expectunity"]}'
+        csv_out[t]['total expectancy'] = f'{total_dict["total_expectancy"]}'
+        csv_out[t]['total expectunity'] = f'{total_dict["total_expectunity"]}'
 
         # ----------------------------------------------------#
+        with open(os.path.join(self.args.output_dir, 'result.csv'), 'w') as csvfile:
+            writer = csv.writer(csvfile)
+            for t in csv_out.keys():
+                for key, value in csv_out[t].items():
+                    writer.writerow([t, key, value])
+        print(f"wrote result at {os.path.join(self.args.output_dir, 'result.csv')}")
+
+    def plot_trade(self, trade_long, trade_short):
+        pass
+        
 
 
     def calc_expectunity(self, wins_long, losses_long, wins_short, losses_short, strat_cal_days):
@@ -268,6 +294,17 @@ class Trader_AMPM:
             self.long_trade[t] = {}
             self.short_trade[t] = {} 
 
+        self.methods = []
+        if args.use_confidence:
+            self.methods.append('confidence')
+            print('using confidence')
+        if args.use_rsi:
+            self.methods.append('rsi')
+            print('using rsi')
+        if args.use_deep:
+            self.methods.append('deep')
+            print('using deep learning')
+
 
     def log(self,date, account_long, account_short, cash, aum):
         print('==========')
@@ -364,7 +401,7 @@ class Trader_AMPM:
         er = ret_dict['y_curncy_prev_origin'][0].tolist()
 
         # rsi
-        rsi = ret_dict['y_rsi_origin'][0][0].tolist()
+        rsi = ret_dict['y_prev_rsi_origin'][0][0].tolist()
 
         # how many equities to trade
         equity_num = 0
@@ -378,7 +415,7 @@ class Trader_AMPM:
                 _closing_price = closing_price[idx]
                 _rsi = rsi[idx]
 
-                _long, _short = self.decision_algo(equity_name, _max_ind, _confidence, _vwap, _closing_price, _rsi)
+                _long, _short = self.decision_algo(self.methods, equity_name, _max_ind, _confidence, _vwap, _closing_price, _rsi)
                 if _long or _short:
                     self.trade_cnt += 1
                     equity_num += 1
@@ -402,7 +439,7 @@ class Trader_AMPM:
                 _closing_price = closing_price[idx]
                 _rsi = rsi[idx]
 
-                _long, _short = self.decision_algo(equity_name, _max_ind, _confidence, _vwap, _closing_price, _rsi)
+                _long, _short = self.decision_algo(self.methods, equity_name, _max_ind, _confidence, _vwap, _closing_price, _rsi)
                 _closing_price_usd = self.to_usd(equity_name, _closing_price, er)
 
 
@@ -506,20 +543,66 @@ class Trader_AMPM:
         self.aum_plot[str(date)] = self.aum
 
 
-    def decision_algo(self, equity_name, up, confidence, vwap, closing_price, rsi):
+    def decision_algo(self, methods, equity_name, up, confidence, vwap, closing_price, rsi):
         _long = False
         _short = False
+        condition = {}
+        if 'deep' in methods:
+            condition['deep_long'] = up
+            condition['deep_short'] = not up
+        if 'rsi' in methods:
+            condition['rsi_long'] = rsi > self.args.rsi_long_thres 
+            condition['rsi_short'] = rsi < self.args.rsi_short_thres 
+
+        if ('deep' in methods) and ('rsi' in methods):
+            if condition['deep_long'] and condition['rsi_long']:
+                condition['long'] = True
+                condition['short'] = False
+            elif condition['deep_short'] and condition['rsi_short']:
+                condition['long'] = False
+                condition['short'] = True
+            else:
+                condition['long'] = False
+                condition['short'] = False
+
+
+        elif 'deep' in methods:
+            if condition['deep_long']:
+                condition['long'] = True
+                condition['short'] = False
+            elif condition['deep_short']:
+                condition['long'] = False
+                condition['short'] = True
+            else:
+                ValueError
+
+        elif 'rsi' in methods:
+            if condition['rsi_long']:
+                condition['long'] = True
+                condition['short'] = False
+            elif condition['rsi_short']:
+                condition['long'] = False
+                condition['short'] = True
+            else:
+                condition['long'] = False
+                condition['short'] = False
+
+        else:
+            condition['long'] = True
+            condition['short'] = True
+
+        if 'confidence' in methods:
+            confidence_thres = {'8035 JT':0.6, '6920 JT':0.6, '6146 JT':0.6, '7735 JT':0.6, '6857 JT':0.6, '240810 KS':0.6, '084370 KS':0.6, '688012 CH':0.6, 'LRCX US':0.6, 'AMAT US': 0.6, 'TER US':0.6, 'ASML NA':0.6}
+        else:
+            confidence_thres = {'8035 JT':0.5, '6920 JT':0.5, '6146 JT':0.5, '7735 JT':0.5, '6857 JT':0.5, '240810 KS':0.5, '084370 KS':0.5, '688012 CH':0.5, 'LRCX US':0.5, 'AMAT US': 0.5, 'TER US':0.5, 'ASML NA':0.5}
+
         #confidence_thres = {'8035 JT':0.62, '6920 JT':0.67, '6146 JT':0.64, '7735 JT':0.63, '6857 JT':0.59, '240810 KS':0.8, '084370 KS':0.65, '688012 CH':0.81, 'LRCX US':0.56, 'AMAT US': 0.59, 'TER US':0.58, 'ASML NA':0.55}
-        #if confidence > confidence_thres[equity_name]:
-        if confidence >= 0.5:
+        if confidence > confidence_thres[equity_name]:
+        #if confidence >= 0.5:
             # long
-            if closing_price < vwap and up and rsi > self.args.rsi_long_thres:
-            #if closing_price < vwap and up:
-            #if rsi > self.args.rsi_long_thres:
+            if closing_price < vwap and condition['long']:
                 _long = True
-            elif closing_price > vwap and not up and rsi < self.args.rsi_short_thres:
-            #elif closing_price > vwap and not up:
-            #elif rsi < self.args.rsi_short_thres:
+            elif closing_price > vwap and condition['short']:
                 _short = True
             else:
                 pass
@@ -574,32 +657,47 @@ class Predictor:
         pred = self.softmax(pred)
         return pred
 
+def parse_input(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name", default='default_run')
+    parser.add_argument("--model_pth", default='model.pth')
+    parser.add_argument("--end_date", default=202109300, type=int)
+    #parser.add_argument("--nhist", default=10, type=int)
+    parser.add_argument("--ntarget", default=[4], type=int, nargs='+')
+    parser.add_argument("--long_thres_list", default=[60], type=int, nargs='+')
+    parser.add_argument("--short_thres_list", default=[40], type=int, nargs='+')
+    parser.add_argument("--use_confidence", action='store_true', default=False)
+    parser.add_argument("--use_rsi", action='store_true', default=False)
+    parser.add_argument("--use_deep", action='store_true', default=False)
+
+    opt = parser.parse_args()
+
+    for key, value in vars(opt).items():
+        args[key] = value
+
+    return args
 
 if __name__=='__main__':
     args_dir = './config_classifier_ampm.yaml'
     with open(args_dir, 'r') as fp:
         args = AttrDict(yaml.load(fp, Loader=yaml.FullLoader))
 
-    args.ntarget = [4]
-    if 'end_date' not in args:
-        args.end_date = None
-    model_pth = './output/ampm_ntarget4_1year/best_model.pth'
-
-    #long_thres_list = [55, 60, 65, 70]
-    #short_thres_list = [40, 45, 50]
-    long_thres_list = [60]
-    short_thres_list = [40]
+    args = parse_input(args)
+    args.output_dir = os.path.join(args.backtest.output_dir, 'backtest')
+    os.makedirs(args.output_dir, exist_ok=True)
+    args.output_dir = os.path.join(args.output_dir, args.name)
+    os.makedirs(args.output_dir, exist_ok=True)
 
     max_aum = 0
     best_long_thres = 0
     best_short_thres = 0
 
-    for long_thres in long_thres_list:
-        for short_thres in short_thres_list:
+    for long_thres in args.long_thres_list:
+        for short_thres in args.short_thres_list:
             args.rsi_long_thres = long_thres
             args.rsi_short_thres = short_thres
 
-            tester = BackTester(args, model_pth, 1000000, 0.0005)
+            tester = BackTester(args, args.model_pth, 1000000, 0.0005)
             aum = tester.run(end_date=args.end_date, do_analysis=False)
             if max_aum < aum:
                 max_aum = aum
@@ -610,7 +708,7 @@ if __name__=='__main__':
     # best rsi threshold
     args.rsi_long_thres = best_long_thres
     args.rsi_short_thres = best_short_thres
-    tester = BackTester(args, model_pth, 1000000, 0.0005)
+    tester = BackTester(args, args.model_pth, 1000000, 0.0005)
     aum = tester.run(end_date=args.end_date, do_analysis=True)
     print(f'best rsi long thres: {best_long_thres}')
     print(f'best rsi short thres: {best_short_thres}')

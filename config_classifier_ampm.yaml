@@ -16,6 +16,9 @@ training:
     output_dir: '/home/nas2_userG/junhahyung/trading/output'
     aug_lambda: 0.005
     
+backtest:
+    output_dir: '/home/nas2_userG/junhahyung/trading/output'
+
 
 root: './data/Semicap_DailyData'
 tables:

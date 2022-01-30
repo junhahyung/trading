@@ -312,7 +312,7 @@ class TradingDatasetAP(Dataset):
         self.anchor = []
         self.y_curncy_prev_origin = []
         self.y_curncy_origin = []
-        self.y_rsi_origin = []
+        self.y_prev_rsi_origin = []
 
         for idx, data_split in enumerate(data_splits):
             for i in range(len(data_split)-nhist-max_ntarget+1):
@@ -335,8 +335,9 @@ class TradingDatasetAP(Dataset):
                 _y_last_origin = []
                 _y_class = []
                 _y_curncy_origin = []
-                _y_rsi_origin = []
+                _y_prev_rsi_origin = []
 
+                prev_rsi_origin = self.recover_price(rsis[idx].iloc[i+nhist-1].to_numpy(), interval_rsi, minval_rsi)
 
                 for t in self.data_config.ntarget:
                     target = data_splits_y[idx].iloc[i+nhist+t-1]
@@ -346,7 +347,7 @@ class TradingDatasetAP(Dataset):
                     target_origin = self.recover_price(target.to_numpy(), interval, minval)
                     target_last_origin = self.recover_price(last_prices[idx].iloc[i+nhist+t-1].to_numpy(), interval_last, minval_last)
                     target_curncy_origin = self.recover_price(currencies[idx].iloc[i+nhist+t-1].to_numpy(), interval_cur, minval_cur)
-                    target_rsi_origin = self.recover_price(rsis[idx].iloc[i+nhist+t-1].to_numpy(), interval_rsi, minval_rsi)
+                    #target_rsi_origin = self.recover_price(rsis[idx].iloc[i+nhist+t-1].to_numpy(), interval_rsi, minval_rsi)
 
                     earnings = np.zeros(self.target_dim)
                     for tdim in range(len(earnings)):
@@ -370,14 +371,14 @@ class TradingDatasetAP(Dataset):
                     _y_origin.append(target_origin)
                     _y_last_origin.append(target_last_origin)
                     _y_curncy_origin.append(target_curncy_origin)
-                    _y_rsi_origin.append(target_rsi_origin)
+                    _y_prev_rsi_origin.append(prev_rsi_origin)
 
                 _y = np.array(_y)
                 _y_class = np.array(_y_class)
                 _y_origin = np.array(_y_origin)
                 _y_last_origin = np.array(_y_last_origin)
                 _y_curncy_origin = np.array(_y_curncy_origin)
-                _y_rsi_origin = np.array(_y_rsi_origin)
+                _y_prev_rsi_origin = np.array(_y_prev_rsi_origin)
                 self.y.append(_y)
                 self.y_date.append(_y_date)
                 self.y_class.append(_y_class)
@@ -387,7 +388,7 @@ class TradingDatasetAP(Dataset):
                 self.y_prev_last_origin.append(prev_last_origin)
                 self.y_curncy_prev_origin.append(prev_curncy_origin)
                 self.y_curncy_origin.append(_y_curncy_origin)
-                self.y_rsi_origin.append(_y_rsi_origin)
+                self.y_prev_rsi_origin.append(_y_prev_rsi_origin)
 
 
                 # add anchor
@@ -407,7 +408,7 @@ class TradingDatasetAP(Dataset):
         self.y_prev_last_origin = np.array(self.y_prev_last_origin)
         self.y_curncy_prev_origin = np.array(self.y_curncy_prev_origin)
         self.y_curncy_origin = np.array(self.y_curncy_origin)
-        self.y_rsi_origin = np.array(self.y_rsi_origin)
+        self.y_prev_rsi_origin = np.array(self.y_prev_rsi_origin)
         self.anchor = np.array(self.anchor)
 
 
@@ -424,7 +425,7 @@ class TradingDatasetAP(Dataset):
         ret_dict['y_prev_last_origin'] = self.y_prev_last_origin[idx]
         ret_dict['y_curncy_prev_origin'] = self.y_curncy_prev_origin[idx]
         ret_dict['y_curncy_origin'] = self.y_curncy_origin[idx]
-        ret_dict['y_rsi_origin'] = self.y_rsi_origin[idx]
+        ret_dict['y_prev_rsi_origin'] = self.y_prev_rsi_origin[idx]
         if self.y_date[idx][0] % 2 == 0:
             ret_dict['y_mask'] = torch.LongTensor(self.am_mask)
         else:
