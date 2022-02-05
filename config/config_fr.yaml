@@ -1,0 +1,23 @@
+name: fr_from_2007
+model_name: BertClassifier
+model:
+    num_attention_heads: 12 
+    bert_layers: 2
+    n_ensemble: 1
+    dropout: 0.1
+    attention_dropout: 0.1
+    hidden_size: 2304 
+    intermediate_size: 2304
+data:
+    root: '/home/nas2_userG/junhahyung/trading/data/firstratedata/filtered/from_2007/'
+    test_split: '2020-01-01 09:00:00' #yyyy-mm-dd HH:MM:SS
+    nhist: 30 
+    ntarget: 1
+
+training:
+    output_dir: '/home/nas2_userG/junhahyung/trading/output/'
+    n_epochs: 1000
+    batch_size: 1024
+    val_freq: 50
+    lr: 0.0001
+

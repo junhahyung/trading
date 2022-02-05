@@ -2,9 +2,12 @@ import os
 import re
 import numpy as np
 import torch
+import json
+import pickle
 from attrdict import AttrDict
 import pandas as pd
 from torch.utils.data import Dataset
+import tqdm
 
 
 '''
@@ -24,6 +27,127 @@ for idx, n in enumerate(cur.columns):
     
 cur.rename(columns=new_header_map, inplace=True)
 '''
+
+# first rate data dataloader
+class TradingDatasetFR(Dataset):
+    def __init__(self, config, mode='train'):
+        self.feature_dim = 5
+        self.config = config
+        self.root = config.data.root
+        self.mode = mode
+        self.test_split = config.data.test_split
+        self.nhist = config.data.nhist
+        self.ntarget = config.data.ntarget
+
+        self.load_json()
+        self.load_processed_dict()
+        self.create_array()
+
+    def load_json(self):
+        _dir = os.path.join(self.root, 'about.json')
+        with open(_dir) as fp:
+            self.about_json = json.load(fp)
+        self.ticker_num = len(self.about_json.keys())
+
+    def load_processed_dict(self):
+        _dir = os.path.join(self.root, 'final_processed')
+        with open(_dir, 'rb') as fp:
+            self.p_dict = pickle.load(fp)
+        print(f'loaded from {_dir}')
+
+    def create_array(self):
+        p_list = list(self.p_dict.items())
+        sorted_list = sorted(list(self.p_dict.items()), key=lambda x: x[0])
+        self.date_list = [el[0] for el in sorted_list]
+
+        for split_index, date in enumerate(self.date_list):
+            if self.test_split <= date:
+                break
+
+        self.split_index = split_index
+
+        _data = [el[1] for el in sorted_list]
+        _data = np.array(_data)
+
+        assert _data.shape[1] == self.ticker_num * 12
+        self.dim = self.ticker_num * self.feature_dim
+
+        if self.mode == 'train':
+            _data = _data[:split_index]
+            self.date_list = self.date_list[:split_index]
+        elif self.mode == 'test':
+            _data = _data[split_index:]
+            self.date_list = self.date_list[split_index:]
+        else:
+            assert False
+
+        _data_origin = []
+        _data_norm = []
+        for i in range(self.ticker_num):
+            _data_origin.append(_data[:, 12*i+1:12*i+6])
+            _data_norm.append(_data[:, 12*i+6+1:12*i+12])
+
+
+        # yyyymmdd, mm, dd, hh, price, amount
+        self.data_origin = np.array(_data_origin)
+        self.data_origin = np.transpose(self.data_origin, (1,0,2))
+        self.data_origin = np.reshape(self.data_origin, (-1, self.dim))
+        self.data_norm = np.array(_data_norm)
+        self.data_norm = np.transpose(self.data_norm, (1,0,2))
+        self.data_norm = np.reshape(self.data_norm, (-1, self.dim))
+        self.dates = np.stack((_data[:,0], _data[:,3]), axis=-1)
+        print(self.dates.shape)
+
+        self.get_price_from_data()
+        self.create_target()
+
+    def get_price_from_data(self):
+        ind = np.arange(self.ticker_num)*self.feature_dim+3
+        self.price_origin = self.data_origin[:, ind]
+        self.price_norm = self.data_norm[:, ind]
+
+        assert self.price_origin.shape[1] == self.ticker_num
+        assert self.price_norm.shape[1] == self.ticker_num
+
+    def create_target(self):
+        pad = np.zeros((self.ntarget, self.ticker_num))
+        pad_minus = -1*np.ones((self.ntarget, self.ticker_num))
+        price_a = np.concatenate((self.price_norm, pad), axis=0)
+        price_b = np.concatenate((pad, self.price_norm), axis=0)
+
+        price_diff = price_a - price_b
+        price_diff = price_diff[self.ntarget:-self.ntarget]
+
+        zeros = np.zeros_like(price_diff)
+        ones = np.ones_like(price_diff)
+
+        self.target = np.concatenate((pad_minus, np.where(price_diff > 0, zeros, ones)), axis=0)
+
+    def from_index(self, idx):
+        x = torch.FloatTensor(self.data_norm[idx:idx+self.nhist])
+        x_origin = self.data_origin[idx:idx+self.nhist]
+        y = torch.LongTensor(self.target[idx+self.nhist-1+self.ntarget])
+        assert not -1 in y
+        y_price_origin = self.price_origin[idx+self.nhist-1+self.ntarget]
+        x_start_date = self.dates[idx]
+        x_end_date = self.dates[idx+self.nhist-1]
+        y_date = self.dates[idx+self.nhist-1+self.ntarget]
+        ret_dict = {}
+        ret_dict['x_origin'] = x_origin
+        ret_dict['y_price_origin'] = y_price_origin
+        ret_dict['x_start_date'] = x_start_date
+        ret_dict['x_end_date'] = x_end_date
+        ret_dict['y_date'] = y_date
+
+        return x, y, ret_dict
+
+
+    def __len__(self):
+        return len(self.data_norm) - self.nhist - self.ntarget
+
+    def __getitem__(self, idx):
+        return self.from_index(idx)
+
 
 
 # AM/PM model
@@ -663,38 +787,31 @@ class TradingDataset(Dataset):
         else:
             return torch.FloatTensor(self.x[idx]), torch.FloatTensor(self.y[idx]), torch.LongTensor(self.y_class[idx]), torch.FloatTensor(self.anchor[idx]), ret_dict
 
-'''
 #--- testing! ----
+'''
 import yaml
 from torch.utils.data import DataLoader
 
-with open('./config_classifier_ampm.yaml', 'r') as fp:
-    data_config = AttrDict(yaml.load(fp, Loader=yaml.FullLoader))
+with open('./config/config_fr.yaml', 'r') as fp:
+    config = AttrDict(yaml.load(fp, Loader=yaml.FullLoader))
     
-tdset = TradingDatasetAP(data_config, mode='train')
+tdset = TradingDatasetFR(config, mode='train')
 dl = DataLoader(tdset, batch_size=1, shuffle=False)
-check = torch.zeros(11, dtype=torch.int8)
-for idx, b in enumerate(dl):
-    x, y_r, y, _, etc = b
-    
-    no = y_r.squeeze() != -0.5
-    _check = torch.bitwise_or(check, no)
-    if torch.any(_check != check):
-        print(f'changed : {_check}')
-        print(etc['y_date'])
-        check = _check
-data_config.test_split = [4875]
-tdset = TradingDatasetAP(data_config, mode='test')
-dl = DataLoader(tdset, batch_size=1, shuffle=False)
-for idx, b in enumerate(dl):
-    if idx == 0:
-        x, _, y, _, etc = b
-        print(etc['y_date'])
-        print(idx)
-    if idx == len(dl)-1:
-        x, _, y, _, etc = b
-        print(etc['y_date'])
-        print(idx)
+for data in tqdm.tqdm(dl):
+    x, y, ret_dict = data
+    print(x.shape)
+    print(x[0][0][:6])
+    print(x[0][-1][:6])
+    print(y.shape)
+    print(y[0][0])
+    x_origin = ret_dict['x_origin']
+    print(x_origin[0][0][:6])
+    print(x_origin[0][-1][:6])
+    y_price_origin = ret_dict['y_price_origin']
+    print(y_price_origin[0][0])
 
-
+    print(int(ret_dict['x_start_date'][0][0]), int(ret_dict['x_start_date'][0][1]))
+    print(int(ret_dict['x_end_date'][0][0]), int(ret_dict['x_end_date'][0][1]))
+    print(int(ret_dict['y_date'][0][0]), int(ret_dict['y_date'][0][1]))
+    break
 '''
