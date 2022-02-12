@@ -10,7 +10,8 @@ model:
     intermediate_size: 2304
 data:
     root: '/home/nas2_userG/junhahyung/trading/data/firstratedata/filtered/from_2007/'
-    test_split: '2020-01-01 09:00:00' #yyyy-mm-dd HH:MM:SS
+    #test_split: '2020-01-01 09:00:00' #yyyy-mm-dd HH:MM:SS
+    test_split: '2021-01-01 09:00:00' #yyyy-mm-dd HH:MM:SS
     nhist: 30 
     ntarget: 1
 
