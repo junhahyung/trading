@@ -120,20 +120,38 @@ class TradingDatasetFR(Dataset):
 
         zeros = np.zeros_like(price_diff)
         ones = np.ones_like(price_diff)
+        #mones = -1*np.ones_like(price_diff)
+        rand = np.random.randn(*price_diff.shape)
 
-        self.target = np.concatenate((pad_minus, np.where(price_diff > 0, zeros, ones)), axis=0)
+        _target = np.where(price_diff == 0, rand, price_diff)
+        print('zero count:')
+        print(np.count_nonzero(price_diff == 0))
+        ind = np.argwhere(price_diff == 0)
+        print(ind)
+        ind_f = ind[:,0]
+        for i in range(2015):
+            dates = self.dates[i+1]
+            l = np.count_nonzero(ind_f == i)
+            print(f'{int(dates[0])} - {int(dates[1])} : {l}')
+        #print(self.data_origin.shape)
+        #print(self.data_origin[ind+1])
+        #print(self.data_origin[ind+1].shape)
+
+        self.target = np.concatenate((pad_minus, np.where(_target > 0, zeros, ones)), axis=0)
 
     def from_index(self, idx):
         x = torch.FloatTensor(self.data_norm[idx:idx+self.nhist])
         x_origin = self.data_origin[idx:idx+self.nhist]
         y = torch.LongTensor(self.target[idx+self.nhist-1+self.ntarget])
         assert not -1 in y
+        x_price_origin = self.price_origin[idx:idx+self.nhist]
         y_price_origin = self.price_origin[idx+self.nhist-1+self.ntarget]
         x_start_date = self.dates[idx]
         x_end_date = self.dates[idx+self.nhist-1]
         y_date = self.dates[idx+self.nhist-1+self.ntarget]
         ret_dict = {}
         ret_dict['x_origin'] = x_origin
+        ret_dict['x_price_origin'] = x_price_origin
         ret_dict['y_price_origin'] = y_price_origin
         ret_dict['x_start_date'] = x_start_date
         ret_dict['x_end_date'] = x_end_date
@@ -787,31 +805,22 @@ class TradingDataset(Dataset):
         else:
             return torch.FloatTensor(self.x[idx]), torch.FloatTensor(self.y[idx]), torch.LongTensor(self.y_class[idx]), torch.FloatTensor(self.anchor[idx]), ret_dict
 
-#--- testing! ----
 '''
+#--- testing! ----
 import yaml
 from torch.utils.data import DataLoader
+
 
 with open('./config/config_fr.yaml', 'r') as fp:
     config = AttrDict(yaml.load(fp, Loader=yaml.FullLoader))
     
-tdset = TradingDatasetFR(config, mode='train')
+tdset = TradingDatasetFR(config, mode='test')
+
 dl = DataLoader(tdset, batch_size=1, shuffle=False)
 for data in tqdm.tqdm(dl):
     x, y, ret_dict = data
-    print(x.shape)
-    print(x[0][0][:6])
-    print(x[0][-1][:6])
-    print(y.shape)
-    print(y[0][0])
-    x_origin = ret_dict['x_origin']
-    print(x_origin[0][0][:6])
-    print(x_origin[0][-1][:6])
-    y_price_origin = ret_dict['y_price_origin']
-    print(y_price_origin[0][0])
-
-    print(int(ret_dict['x_start_date'][0][0]), int(ret_dict['x_start_date'][0][1]))
+    print(ret_dict['x_end_date'].shape)
     print(int(ret_dict['x_end_date'][0][0]), int(ret_dict['x_end_date'][0][1]))
-    print(int(ret_dict['y_date'][0][0]), int(ret_dict['y_date'][0][1]))
+
     break
 '''

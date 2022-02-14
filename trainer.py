@@ -72,7 +72,7 @@ class Trainer():
             state_dicts.append(model.state_dict())
         save_dict["model"] = state_dicts
         save_dict["step"] = step
-        save_name = os.path.join(self.output_dir, f"{name}.pth")
+        save_name = os.path.join(self.output_dir, f"{name}-{step}.pth")
         torch.save(save_dict, save_name)
         print(f"saved model {save_name}")
 
@@ -181,7 +181,7 @@ class Trainer():
             acc = self.calc_acc(max_ind, y.view(-1))
 
             pred = self.softmax(pred)
-            trunc_pred = torch.where(pred > 0.7, pred, torch.zeros_like(pred).to(self.device))
+            trunc_pred = torch.where(pred > 0.6, pred, torch.zeros_like(pred).to(self.device))
             logit_sum = torch.sum(trunc_pred, -1)
             nonzero_ind = torch.nonzero(logit_sum)
             trunc_bs = len(nonzero_ind)
